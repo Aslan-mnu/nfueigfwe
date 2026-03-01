@@ -79,18 +79,19 @@ export default function SearchScreen() {
     const loadAllData = async () => {
         try {
             const stored = await AsyncStorage.getItem('products');
-            let parsedProducts = stored ? JSON.parse(stored) : [];
+            let allProducts = stored ? JSON.parse(stored) : [];
 
-            if (parsedProducts.length === 0) {
+            if (allProducts.length === 0) {
                 // Seed if empty
-                parsedProducts = [
+                allProducts = [
                     { id: '1', title: 'iPhone 15 Pro Max', price: 2599.99, rating: 4.8, reviews: 2840, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/iphone.jpg', discount: 10, category: 'Elektronika' },
                     { id: '2', title: 'Samsung Galaxy Watch 6', price: 459.99, rating: 3.0, reviews: 1523, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/watch.jpg', discount: 15, category: 'Elektronika' },
                     { id: '3', title: 'Sony WH-1000XM5', price: 649.99, rating: 4.9, reviews: 3200, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/headphone.jpg', category: 'Elektronika' },
                     { id: '4', title: 'MacBook Air M2', price: 1899.00, rating: 4.7, reviews: 890, image: 'https://store.storeimages.cdn-apple.com/4668/as-images.apple.com/is/macbook-air-midnight-select-20220606?wid=904&hei=840&fmt=jpeg&qlt=90&.v=1653084303665', category: 'Elektronika' }
                 ];
+                await AsyncStorage.setItem('products', JSON.stringify(allProducts));
             }
-            setProducts(parsedProducts);
+            setProducts(allProducts.filter((p: any) => p.visible !== false));
 
             const storedCart = await AsyncStorage.getItem('cart');
             setCart(storedCart ? JSON.parse(storedCart) : []);

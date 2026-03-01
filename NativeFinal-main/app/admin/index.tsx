@@ -54,7 +54,8 @@ export default function AdminScreen() {
             ]);
 
             if (storedProducts) {
-                setProducts(JSON.parse(storedProducts));
+                const parsedProds = JSON.parse(storedProducts);
+                setProducts(parsedProds.filter((p: any) => p.visible !== false));
             } else {
                 // Initial Seed if empty
                 const initialProducts = [
@@ -66,7 +67,8 @@ export default function AdminScreen() {
             }
 
             if (storedCats) {
-                setCategories(JSON.parse(storedCats));
+                const parsedCats = JSON.parse(storedCats);
+                setCategories(parsedCats.filter((c: any) => c.visible !== false));
             } else {
                 // Initial Seed if empty
                 const initialCats = [
@@ -100,33 +102,38 @@ export default function AdminScreen() {
 
     const deleteProduct = async (id: string) => {
         try {
-            // Debug: Start
             console.log('Silmə başlayır, ID:', id);
 
-            // Fetch current fresh data from storage
-            const stored = await AsyncStorage.getItem('products');
-            if (!stored) {
-                Alert.alert('Xəta', 'Yaddaşda heç bir məhsul tapılmadı (Data null)');
-                return;
+            // DB-dən orijinal siyahını çəkib həmin id-nin görünüşünü (visible) false edirik (Soft Delete)
+            const storedProducts = await AsyncStorage.getItem('products');
+            if (storedProducts) {
+                const currentProducts = JSON.parse(storedProducts);
+                const updatedProducts = currentProducts.map((p: any) =>
+                    String(p.id) === String(id) ? { ...p, visible: false } : p
+                );
+                await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
             }
 
-            const currentProducts = JSON.parse(stored);
-            const exists = currentProducts.some((p: any) => String(p.id) === String(id));
+            // State ekranından visual olaraq gizlədirik
+            const newProducts = products.filter(item => String(item.id) !== String(id));
+            setProducts(newProducts);
 
-            if (!exists) {
-                Alert.alert('Problem', `Bu ID (${id}) ilə məhsul bazada tapılmadı. Siyahıda olan ID-lər: ${currentProducts.map((p: any) => p.id).join(', ')}`);
-                return;
+            // Səbət və Sevimlilərdən də silmək
+            const storedCart = await AsyncStorage.getItem('cart');
+            if (storedCart) {
+                const currentCart = JSON.parse(storedCart);
+                const updatedCart = currentCart.filter((item: any) => String(item.id) !== String(id));
+                await AsyncStorage.setItem('cart', JSON.stringify(updatedCart));
             }
 
-            const updatedProducts = currentProducts.filter((p: any) => String(p.id) !== String(id));
+            const storedFavs = await AsyncStorage.getItem('favorites');
+            if (storedFavs) {
+                const currentFavs = JSON.parse(storedFavs);
+                const updatedFavs = currentFavs.filter((item: any) => String(item.id) !== String(id));
+                await AsyncStorage.setItem('favorites', JSON.stringify(updatedFavs));
+            }
 
-            // Save to storage
-            await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
-
-            // Update UI
-            setProducts(updatedProducts);
-
-            Alert.alert('Uğur', 'Məhsul bazadan və ekrandan uğurla silindi');
+            Alert.alert('Uğur', 'Məhsul tamamilə silindi (siyahı, səbət və səhifələrdən)');
         } catch (error: any) {
             console.error('Delete error:', error);
             Alert.alert('Xəta (Catch)', 'Xəta mesajı: ' + error.message);
@@ -135,21 +142,10 @@ export default function AdminScreen() {
 
     const deleteCategory = async (id: string) => {
         try {
-            const storedCats = await AsyncStorage.getItem('categories');
-            const storedProds = await AsyncStorage.getItem('products');
-
-            if (!storedCats) {
-                Alert.alert('Xəta', 'Kateqoriyalar yaddaşda tapılmadı');
-                return;
-            }
-
-            const currentCats = JSON.parse(storedCats);
-            const currentProds = storedProds ? JSON.parse(storedProds) : [];
-
-            const catToDelete = currentCats.find((c: any) => String(c.id) === String(id));
+            const catToDelete = categories.find((c: any) => String(c.id) === String(id));
 
             if (!catToDelete) {
-                Alert.alert('Problem', 'Bu kateqoriya artıq mövcud deyil');
+                Alert.alert('Problem', 'Bu kateqoriya tapılmadı');
                 return;
             }
 
@@ -158,21 +154,54 @@ export default function AdminScreen() {
                 return;
             }
 
-            const newCats = currentCats.filter((c: any) => String(c.id) !== String(id));
-            const newProds = currentProds.map((p: any) => {
+            // Soft Delete DB-yə yazırıq
+            const storedCats = await AsyncStorage.getItem('categories');
+            if (storedCats) {
+                const currentCats = JSON.parse(storedCats);
+                const updatedCats = currentCats.map((c: any) =>
+                    String(c.id) === String(id) ? { ...c, visible: false } : c
+                );
+                await AsyncStorage.setItem('categories', JSON.stringify(updatedCats));
+            }
+
+            // Ekranda State-dən gizlədirik
+            const newCats = categories.filter(item => String(item.id) !== String(id));
+            setCategories(newCats);
+
+            // DB-də olan Bütün məhsulların aid olduğu digər kateqoriyanı "Hamısı" edirik
+            const storedProds = await AsyncStorage.getItem('products');
+            if (storedProds) {
+                const currentProds = JSON.parse(storedProds);
+                const updatedProds = currentProds.map((p: any) =>
+                    p.category === catToDelete.name ? { ...p, category: 'Hamısı' } : p
+                );
+                await AsyncStorage.setItem('products', JSON.stringify(updatedProds));
+            }
+
+            // Mövcud State-də olanları da dəyişirik
+            const newProds = products.map((p: any) => {
                 if (p.category === catToDelete.name) return { ...p, category: 'Hamısı' };
                 return p;
             });
-
-            await Promise.all([
-                AsyncStorage.setItem('categories', JSON.stringify(newCats)),
-                AsyncStorage.setItem('products', JSON.stringify(newProds))
-            ]);
-
-            setCategories(newCats);
             setProducts(newProds);
 
-            Alert.alert('Uğur', 'Kateqoriya silindi və aid olan məhsullar "Hamısı" bölməsinə köçürüldü');
+            // Carts/Favorites
+            const updateStorageCategory = async (key: string) => {
+                const stored = await AsyncStorage.getItem(key);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    const mapped = parsed.map((item: any) => {
+                        if (item.category === catToDelete.name) return { ...item, category: 'Hamısı' };
+                        return item;
+                    });
+                    await AsyncStorage.setItem(key, JSON.stringify(mapped));
+                }
+            };
+
+            await updateStorageCategory('cart');
+            await updateStorageCategory('favorites');
+
+            Alert.alert('Uğur', 'Kateqoriya uğurla silindi və məhsullar "Hamısı" bölməsinə köçürüldü');
         } catch (error: any) {
             console.error('Cat Delete error:', error);
             Alert.alert('Problem (Catch)', 'Xəta: ' + error.message);
@@ -287,6 +316,7 @@ export default function AdminScreen() {
                     </>
                 ) : (
                     <>
+
                         <View style={styles.addInputRow}>
                             <TextInput
                                 style={styles.input}

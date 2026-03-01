@@ -32,6 +32,33 @@ export default function HomeScreen() {
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+
+    const BANNERS: { id: string, title: string, subtitle: string, colors: readonly [string, string, ...string[]], colorsDark: readonly [string, string, ...string[]] }[] = [
+        {
+            id: '1',
+            title: 'Yeni İl Endirimləri!',
+            subtitle: '50%-ə qədər',
+            colors: ['#A855F7', '#EC4899'],
+            colorsDark: ['#4C1D95', '#831843']
+        },
+        {
+            id: '2',
+            title: 'Bahar Kolleksiyası',
+            subtitle: 'Yeni məhsullar',
+            colors: ['#34C759', '#30D158'],
+            colorsDark: ['#1E8236', '#229A41']
+        },
+        {
+            id: '3',
+            title: 'Günün Təklifi',
+            subtitle: 'Pulsuz Çatdırılma',
+            colors: ['#007AFF', '#5856D6'],
+            colorsDark: ['#0A4B8F', '#353482']
+        }
+    ];
+
+    const flatListRef = React.useRef<FlatList>(null);
 
     useFocusEffect(
         useCallback(() => {
@@ -46,28 +73,25 @@ export default function HomeScreen() {
 
     const loadAllData = async () => {
         try {
-            // Load Products
             const storedProducts = await AsyncStorage.getItem('products');
             const seedProducts = [
-                { id: '1', title: 'iPhone 15 Pro Max', price: 2599.99, rating: 4.8, reviews: 2840, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/iphone.jpg', discount: 10, category: 'Elektronika' },
+                { id: '1', title: 'iPhone 15 Pro Max', price: 2599.99, rating: 4.8, reviews: 2840, image: 'iphonr.jpg', discount: 10, category: 'Elektronika' },
                 { id: '2', title: 'Samsung Galaxy Watch 6', price: 459.99, rating: 3.0, reviews: 1523, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/watch.jpg', discount: 15, category: 'Elektronika' },
                 { id: '3', title: 'Sony WH-1000XM5', price: 649.99, rating: 4.9, reviews: 3200, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/headphone.jpg', category: 'Elektronika' }
             ];
 
             if (storedProducts === null) {
-                // First time: seed defaults
                 await AsyncStorage.setItem('products', JSON.stringify(seedProducts));
                 setProducts(seedProducts);
             } else {
-                setProducts(JSON.parse(storedProducts));
+                const parsedProds = JSON.parse(storedProducts);
+                setProducts(parsedProds.filter((p: any) => p.visible !== false));
             }
 
-            // Load Categories
             const storedCats = await AsyncStorage.getItem('categories');
             let parsedCats = [];
 
             if (storedCats === null) {
-                // First time: seed defaults
                 parsedCats = [
                     { id: 'all', name: 'Hamısı', icon: 'grid-outline' },
                     { id: '1', name: 'Elektronika', icon: 'phone-portrait-outline' },
@@ -77,15 +101,14 @@ export default function HomeScreen() {
                 ];
                 await AsyncStorage.setItem('categories', JSON.stringify(parsedCats));
             } else {
-                parsedCats = JSON.parse(storedCats);
-                // Ensure "Hamısı" is always there
+                const fullCats = JSON.parse(storedCats);
+                parsedCats = fullCats.filter((c: any) => c.visible !== false);
                 if (!parsedCats.some((c: any) => c.name === 'Hamısı')) {
                     parsedCats.unshift({ id: 'all', name: 'Hamısı', icon: 'grid-outline' });
                 }
             }
             setCategories(parsedCats);
 
-            // Load other data
             const storedCart = await AsyncStorage.getItem('cart') || '[]';
             setCart(JSON.parse(storedCart));
 
@@ -203,17 +226,44 @@ export default function HomeScreen() {
                     <Ionicons name="mic-outline" size={20} color="#999" />
                 </View>
 
-                <LinearGradient colors={isDarkMode ? ['#4C1D95', '#831843'] : ['#A855F7', '#EC4899']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bannerContainer}>
-                    <View style={styles.bannerContent}>
-                        <Text style={styles.bannerTitle}>Yeni İl Endirimlər!</Text>
-                        <Text style={styles.bannerSubtitle}>50%-ə qədər</Text>
-                    </View>
+                <View style={{ marginBottom: 24 }}>
+                    <FlatList
+                        ref={flatListRef}
+                        data={BANNERS}
+                        keyExtractor={item => item.id}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onScroll={(e) => {
+                            const slideSize = e.nativeEvent.layoutMeasurement.width;
+                            const index = Math.round(e.nativeEvent.contentOffset.x / slideSize);
+                            if (index !== activeBannerIndex && index < BANNERS.length) {
+                                setActiveBannerIndex(index);
+                            }
+                        }}
+                        scrollEventThrottle={16}
+                        renderItem={({ item }) => (
+                            <View style={{ width: width }}>
+                                <LinearGradient
+                                    colors={isDarkMode ? item.colorsDark : item.colors}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.bannerContainer}
+                                >
+                                    <View style={styles.bannerContent}>
+                                        <Text style={styles.bannerTitle}>{item.title}</Text>
+                                        <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
+                                    </View>
+                                </LinearGradient>
+                            </View>
+                        )}
+                    />
                     <View style={styles.paginationDots}>
-                        <View style={[styles.dot, styles.activeDot]} />
-                        <View style={styles.dot} />
-                        <View style={styles.dot} />
+                        {BANNERS.map((_, i) => (
+                            <View key={i} style={[styles.dot, activeBannerIndex === i && styles.activeDot]} />
+                        ))}
                     </View>
-                </LinearGradient>
+                </View>
 
                 <View style={styles.categoriesContainer}>
                     <FlatList data={categories} renderItem={renderCategoryItem} keyExtractor={item => item.id} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }} />
@@ -299,13 +349,13 @@ const styles = StyleSheet.create({
     searchContainerDark: { backgroundColor: '#1E1E1E' },
     searchIcon: { marginRight: 10 },
     searchInput: { flex: 1, fontFamily: 'Inter-Regular', fontSize: 15, color: '#333' },
-    bannerContainer: { marginHorizontal: 20, borderRadius: 16, height: 160, justifyContent: 'center', paddingHorizontal: 24, marginBottom: 24 },
+    bannerContainer: { marginHorizontal: 20, borderRadius: 16, height: 160, justifyContent: 'center', paddingHorizontal: 24 },
     bannerContent: { zIndex: 1 },
     bannerTitle: { color: '#FFF', fontSize: 20, fontFamily: 'Inter-Bold', marginBottom: 8 },
     bannerSubtitle: { color: '#FFF', fontSize: 28, fontFamily: 'Inter-ExtraBold' },
-    paginationDots: { position: 'absolute', bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginHorizontal: 4 },
-    activeDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#FFF' },
+    paginationDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 12 },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.2)', marginHorizontal: 4 },
+    activeDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#007AFF' },
     categoriesContainer: { marginBottom: 24 },
     categoryItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#E8E8E8', marginRight: 12, backgroundColor: '#FFF' },
     categoryItemDark: { backgroundColor: '#1A1A1A', borderColor: '#333' },

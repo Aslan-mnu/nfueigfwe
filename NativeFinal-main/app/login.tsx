@@ -25,7 +25,7 @@ export default function LoginScreen() {
             return;
         }
 
-        if (email === 'adminyekdi@minishop.com' && password === 'AdminYekdi') {
+        if (email === 'deliadmin@minishop.com' && password === 'deliAdmin123') {
             router.replace('/admin' as any);
             return;
         }
