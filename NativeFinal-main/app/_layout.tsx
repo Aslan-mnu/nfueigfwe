@@ -10,7 +10,6 @@ import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {

@@ -11,7 +11,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 const COLORS = {
@@ -50,28 +50,15 @@ export default function DeleteProductScreen() {
     };
 
     const confirmDelete = (id: string, name: string) => {
-        Alert.alert(
-            'Silməni Təsdiqlə',
-            `"${name}" adlı məhsulu silmək istədiyinizə əminsiniz?`,
-            [
-                { text: 'Ləğv et', style: 'cancel' },
-                {
-                    text: 'Bəli, Sil',
-                    style: 'destructive',
-                    onPress: () => deleteProduct(id)
-                }
-            ]
-        );
+        deleteProduct(id);
     };
 
     const deleteProduct = async (id: string) => {
         try {
-            // State-dən silib, sonra bazaya yazmaq (Siz istəyən məntiq)
             const newProducts = products.filter(item => String(item.id) !== String(id));
             await AsyncStorage.setItem('products', JSON.stringify(newProducts));
             setProducts(newProducts);
 
-            // Səbətdən silmək
             const storedCart = await AsyncStorage.getItem('cart');
             if (storedCart) {
                 const currentCart = JSON.parse(storedCart);
@@ -79,15 +66,12 @@ export default function DeleteProductScreen() {
                 await AsyncStorage.setItem('cart', JSON.stringify(newCart));
             }
 
-            // Sevimlilərdən silmək
             const storedFavs = await AsyncStorage.getItem('favorites');
             if (storedFavs) {
                 const currentFavs = JSON.parse(storedFavs);
                 const newFavs = currentFavs.filter((item: any) => String(item.id) !== String(id));
                 await AsyncStorage.setItem('favorites', JSON.stringify(newFavs));
             }
-
-            Alert.alert('Uğur', 'Məhsul tamamilə hər yerdən (Səbət və Sevimlilər də daxil) silindi!');
         } catch (error: any) {
             console.error(error);
             Alert.alert('Xəta', error.message);

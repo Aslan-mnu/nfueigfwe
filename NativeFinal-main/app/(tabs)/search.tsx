@@ -58,8 +58,8 @@ export default function SearchScreen() {
     const [cart, setCart] = useState<any[]>([]);
     const [favorites, setFavorites] = useState<any[]>([]);
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
-    // Filter States
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [priceRange, setPriceRange] = useState(3000);
     const [selectedRating, setSelectedRating] = useState('all');
@@ -82,7 +82,6 @@ export default function SearchScreen() {
             let allProducts = stored ? JSON.parse(stored) : [];
 
             if (allProducts.length === 0) {
-                // Seed if empty
                 allProducts = [
                     { id: '1', title: 'iPhone 15 Pro Max', price: 2599.99, rating: 4.8, reviews: 2840, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/iphone.jpg', discount: 10, category: 'Elektronika' },
                     { id: '2', title: 'Samsung Galaxy Watch 6', price: 459.99, rating: 3.0, reviews: 1523, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/watch.jpg', discount: 15, category: 'Elektronika' },
@@ -98,6 +97,9 @@ export default function SearchScreen() {
 
             const storedFavs = await AsyncStorage.getItem('favorites');
             setFavorites(storedFavs ? JSON.parse(storedFavs) : []);
+
+            const storedHistory = await AsyncStorage.getItem('searchHistory');
+            setSearchHistory(storedHistory ? JSON.parse(storedHistory) : []);
 
             const theme = await AsyncStorage.getItem('darkMode');
             setIsDarkMode(theme === 'true');
@@ -130,6 +132,24 @@ export default function SearchScreen() {
             setCart(currentCart);
             Alert.alert('Səbət', 'Məhsul əlavə olundu!');
         } catch (error) { console.error(error); }
+    };
+
+    const handleSearch = async (query: string) => {
+        setSearchQuery(query);
+        if (!query.trim()) return;
+
+        let history = [...searchHistory];
+        if (!history.includes(query)) {
+            history.unshift(query);
+            if (history.length > 5) history.pop();
+            setSearchHistory(history);
+            await AsyncStorage.setItem('searchHistory', JSON.stringify(history));
+        }
+    };
+
+    const clearHistory = async () => {
+        setSearchHistory([]);
+        await AsyncStorage.removeItem('searchHistory');
     };
 
     const filteredProducts = products.filter(product => {
@@ -199,7 +219,11 @@ export default function SearchScreen() {
                         placeholder="Məhsul, marka və ya kateqoriya..."
                         placeholderTextColor="#999"
                         value={searchQuery}
-                        onChangeText={setSearchQuery}
+                        onChangeText={(text) => {
+                            setSearchQuery(text);
+                            if (text.length > 3) handleSearch(text);
+                        }}
+                        onSubmitEditing={() => handleSearch(searchQuery)}
                         clearButtonMode="while-editing"
                     />
                 </View>
@@ -216,6 +240,29 @@ export default function SearchScreen() {
                 </TouchableOpacity>
                 <Text style={[styles.resultCount, isDarkMode && styles.textDarkSecondary]}>{filteredProducts.length} məhsul tapıldı</Text>
             </View>
+
+            {searchQuery === '' && searchHistory.length > 0 && (
+                <View style={styles.historyContainer}>
+                    <View style={styles.historyHeader}>
+                        <Text style={[styles.historyTitle, isDarkMode && styles.textDark]}>Son axtarışlar</Text>
+                        <TouchableOpacity onPress={clearHistory}>
+                            <Text style={styles.clearHistoryTxt}>Təmizlə</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={styles.historyList}>
+                        {searchHistory.map((item, index) => (
+                            <TouchableOpacity
+                                key={index}
+                                style={[styles.historyItem, isDarkMode && styles.historyItemDark]}
+                                onPress={() => handleSearch(item)}
+                            >
+                                <Ionicons name="time-outline" size={16} color="#999" />
+                                <Text style={[styles.historyItemTxt, isDarkMode && styles.textDark]}>{item}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            )}
 
             {filteredProducts.length === 0 ? (
                 <View style={styles.noResults}>
@@ -252,7 +299,6 @@ export default function SearchScreen() {
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-                            {/* Categories Section */}
                             <View style={styles.filterSection}>
                                 <Text style={[styles.filterSectionTitle, isDarkMode && styles.textDarkSecondary]}>Kateqoriya</Text>
                                 <View style={styles.categoryGrid}>
@@ -277,7 +323,6 @@ export default function SearchScreen() {
                                 </View>
                             </View>
 
-                            {/* Sort Section */}
                             <View style={styles.filterSection}>
                                 <Text style={[styles.filterSectionTitle, isDarkMode && styles.textDarkSecondary]}>Sıralama</Text>
                                 <View style={styles.sortOptions}>
@@ -302,7 +347,6 @@ export default function SearchScreen() {
                                 </View>
                             </View>
 
-                            {/* Rating Section */}
                             <View style={styles.filterSection}>
                                 <Text style={[styles.filterSectionTitle, isDarkMode && styles.textDarkSecondary]}>Minimum Reytinq</Text>
                                 <View style={styles.ratingGrid}>
@@ -329,7 +373,6 @@ export default function SearchScreen() {
                                 </View>
                             </View>
 
-                            {/* Price Section */}
                             <View style={styles.filterSection}>
                                 <View style={styles.priceHeader}>
                                     <Text style={[styles.filterSectionTitle, isDarkMode && styles.textDarkSecondary]}>Qiymət aralığı</Text>
@@ -440,4 +483,12 @@ const styles = StyleSheet.create({
     applyBtnTxt: { fontSize: 16, fontFamily: 'Inter-Bold', color: '#FFF' },
     textDark: { color: '#FFF' },
     textDarkSecondary: { color: '#AAA' },
+    historyContainer: { padding: 20 },
+    historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    historyTitle: { fontSize: 16, fontFamily: 'Montserrat-Bold', color: '#111' },
+    clearHistoryTxt: { fontSize: 13, fontFamily: 'Inter-Bold', color: '#FF3B30' },
+    historyList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    historyItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, gap: 8 },
+    historyItemDark: { backgroundColor: '#1E1E1E' },
+    historyItemTxt: { fontSize: 14, fontFamily: 'Inter-Medium', color: '#333' },
 });

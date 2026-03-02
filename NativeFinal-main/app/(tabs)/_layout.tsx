@@ -54,6 +54,13 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
+                name="map"
+                options={{
+                    title: 'Xəritə',
+                    tabBarIcon: ({ color }) => <Ionicons name="map-outline" size={24} color={color} />,
+                }}
+            />
+            <Tabs.Screen
                 name="cart"
                 options={{
                     title: 'Səbət',

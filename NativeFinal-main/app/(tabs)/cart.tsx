@@ -11,6 +11,7 @@ import {
     SafeAreaView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -31,6 +32,9 @@ export default function CartScreen() {
     const [manualDate, setManualDate] = useState<Date | undefined>(undefined);
     const [deliveryEstimate, setDeliveryEstimate] = useState<string>('');
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [promoInput, setPromoInput] = useState('');
+    const [appliedDiscount, setAppliedDiscount] = useState(0);
+    const [isPromoValid, setIsPromoValid] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -76,6 +80,23 @@ export default function CartScreen() {
         } catch (error) { console.error(error); }
     };
 
+    const applyPromoCode = () => {
+        const code = promoInput.trim().toUpperCase();
+        if (code === 'MINI20') {
+            setAppliedDiscount(20);
+            setIsPromoValid(true);
+            Alert.alert('Uğurlu', '20% endirim tətbiq edildi!');
+        } else if (code === 'SAVE10') {
+            setAppliedDiscount(10);
+            setIsPromoValid(true);
+            Alert.alert('Uğurlu', '10% endirim tətbiq edildi!');
+        } else {
+            setAppliedDiscount(0);
+            setIsPromoValid(false);
+            Alert.alert('Xəta', 'Yanlış promo kod.');
+        }
+    };
+
     const handleCheckout = async () => {
         try {
             if (shippingType === 'Manual' && !manualDate) {
@@ -86,17 +107,35 @@ export default function CartScreen() {
             const storedOrders = await AsyncStorage.getItem('orders') || '[]';
             const orders = JSON.parse(storedOrders);
 
+            const storedUser = await AsyncStorage.getItem('user');
+            const currentUser = storedUser ? JSON.parse(storedUser) : null;
+
             const newOrder = {
                 id: Math.random().toString(36).substr(2, 9),
+                userEmail: currentUser?.email || 'anonim@example.com',
                 date: new Date().toLocaleDateString('az-AZ'),
                 items: cartItems,
-                total: total.toFixed(2),
+                deliveryDate: deliveryEstimate || (shippingType === 'Manual' ? manualDate?.toLocaleDateString('az-AZ') : 'Təxmini'),
                 status: 'Sifariş verildi',
                 shippingType: shippingType === 'Standard' ? 'Standart' : shippingType === 'Express' ? 'Express' : 'Manual',
-                deliveryDate: deliveryEstimate || (shippingType === 'Manual' ? manualDate?.toLocaleDateString('az-AZ') : 'Təxmini')
+                discountPercent: appliedDiscount,
+                total: total.toFixed(2),
             };
 
-            orders.unshift(newOrder); // Add to beginning
+            const storedProducts = await AsyncStorage.getItem('products');
+            if (storedProducts) {
+                let products = JSON.parse(storedProducts);
+                cartItems.forEach(cartItem => {
+                    const productIdx = products.findIndex((p: any) => String(p.id) === String(cartItem.id));
+                    if (productIdx > -1) {
+                        const currentStock = products[productIdx].stock || 10;
+                        products[productIdx].stock = Math.max(0, currentStock - (cartItem.quantity || 1));
+                    }
+                });
+                await AsyncStorage.setItem('products', JSON.stringify(products));
+            }
+
+            orders.unshift(newOrder);
             await AsyncStorage.setItem('orders', JSON.stringify(orders));
             await AsyncStorage.removeItem('cart');
             setCartItems([]);
@@ -109,7 +148,8 @@ export default function CartScreen() {
 
     const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     const shipping = cartItems.length > 0 ? (shippingType === 'Standard' ? 2.00 : shippingType === 'Express' ? 10.00 : 5.00) : 0;
-    const total = subtotal + shipping;
+    const discountAmount = (subtotal * appliedDiscount) / 100;
+    const total = subtotal + shipping - discountAmount;
 
     const renderCartItem = ({ item }: { item: CartItem }) => (
         <View style={[styles.cartItem, isDarkMode && styles.cartItemDark]}>
@@ -173,10 +213,33 @@ export default function CartScreen() {
                                 onEstimateChange={(est) => setDeliveryEstimate(est)}
                             />
                         </View>
+                        <View style={[styles.promoContainer, isDarkMode && styles.promoContainerDark]}>
+                            <TextInput
+                                style={[styles.promoInput, isDarkMode && styles.textDark]}
+                                placeholder="Promo kod daxil edin"
+                                placeholderTextColor="#999"
+                                value={promoInput}
+                                onChangeText={setPromoInput}
+                                autoCapitalize="characters"
+                            />
+                            <TouchableOpacity
+                                style={[styles.promoBtn, isPromoValid && styles.promoBtnApplied]}
+                                onPress={applyPromoCode}
+                            >
+                                <Text style={styles.promoBtnText}>{isPromoValid ? 'Tətbiq olundu' : 'Tətbiq et'}</Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <View style={styles.summaryRow}>
                             <Text style={[styles.summaryLabel, isDarkMode && styles.textDarkSecondary]}>Məhsulun qiyməti</Text>
                             <Text style={[styles.summaryValue, isDarkMode && styles.textDark]}>{subtotal.toFixed(2)} ₼</Text>
                         </View>
+                        {appliedDiscount > 0 && (
+                            <View style={styles.summaryRow}>
+                                <Text style={[styles.summaryLabel, { color: '#34C759' }]}>Endirim ({appliedDiscount}%)</Text>
+                                <Text style={[styles.summaryValue, { color: '#34C759' }]}>-{discountAmount.toFixed(2)} ₼</Text>
+                            </View>
+                        )}
                         <View style={styles.summaryRow}>
                             <Text style={[styles.summaryLabel, isDarkMode && styles.textDarkSecondary]}>Çatdırılma</Text>
                             <Text style={[styles.summaryValue, isDarkMode && styles.textDark]}>{shipping.toFixed(2)} ₼</Text>
@@ -234,4 +297,10 @@ const styles = StyleSheet.create({
     shopButtonText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Inter-Bold' },
     textDark: { color: '#FFF' },
     textDarkSecondary: { color: '#AAA' },
+    promoContainer: { flexDirection: 'row', backgroundColor: '#F5F5F5', borderRadius: 12, padding: 4, marginBottom: 15 },
+    promoContainerDark: { backgroundColor: '#2C2C2E' },
+    promoInput: { flex: 1, paddingHorizontal: 16, height: 44, fontSize: 14, fontFamily: 'Inter-Medium' },
+    promoBtn: { backgroundColor: '#007AFF', paddingHorizontal: 16, height: 44, borderRadius: 10, justifyContent: 'center' },
+    promoBtnApplied: { backgroundColor: '#34C759' },
+    promoBtnText: { color: '#FFF', fontSize: 13, fontFamily: 'Inter-Bold' },
 });

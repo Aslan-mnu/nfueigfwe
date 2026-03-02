@@ -10,7 +10,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 const COLORS = {
@@ -49,18 +49,7 @@ export default function DeleteCategoryScreen() {
     };
 
     const confirmDelete = (id: string, name: string) => {
-        Alert.alert(
-            'Silməni Təsdiqlə',
-            `"${name}" adlı kateqoriyanı silmək istədiyinizə əminsiniz? (Qeyd: Aid olan məhsullar "Hamısı" kateqoriyasına köçürüləcək)`,
-            [
-                { text: 'Ləğv et', style: 'cancel' },
-                {
-                    text: 'Bəli, Sil',
-                    style: 'destructive',
-                    onPress: () => deleteCategory(id)
-                }
-            ]
-        );
+        deleteCategory(id);
     };
 
     const deleteCategory = async (id: string) => {
@@ -73,12 +62,10 @@ export default function DeleteCategoryScreen() {
                 return;
             }
 
-            // State-dən silib, sonra bazaya yazmaq (Siz istəyən məntiq)
             const newCategories = categories.filter(item => String(item.id) !== String(id));
             await AsyncStorage.setItem('categories', JSON.stringify(newCategories));
             setCategories(newCategories);
 
-            // Update associated products, carts and favorites
             const updateProductsWithCategory = async (storageKey: string) => {
                 const storedItems = await AsyncStorage.getItem(storageKey);
                 if (storedItems) {
@@ -94,8 +81,6 @@ export default function DeleteCategoryScreen() {
             await updateProductsWithCategory('products');
             await updateProductsWithCategory('cart');
             await updateProductsWithCategory('favorites');
-
-            Alert.alert('Uğur', 'Kateqoriya uğurla silindi və aid olan məhsullar "Hamısı" kateqoriyasına keçirildi');
         } catch (error: any) {
             console.error(error);
             Alert.alert('Xəta', error.message);

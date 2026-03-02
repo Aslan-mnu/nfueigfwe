@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -12,7 +14,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 
 export default function AddProductScreen() {
@@ -23,6 +25,7 @@ export default function AddProductScreen() {
     const [image, setImage] = useState('');
     const [discount, setDiscount] = useState('');
     const [categories, setCategories] = useState<any[]>([]);
+    const [pickedImage, setPickedImage] = useState<string | null>(null);
 
     React.useEffect(() => {
         loadCategories();
@@ -39,6 +42,20 @@ export default function AddProductScreen() {
         }
     };
 
+    const pickImage = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (!result.canceled) {
+            setPickedImage(result.assets[0].uri);
+            setImage(result.assets[0].uri);
+        }
+    };
+
     const handleAddProduct = async () => {
         if (!title || !price || !category) {
             Alert.alert('Xəta', 'Zəhmət olmasa vacib xanaları doldurun');
@@ -51,9 +68,9 @@ export default function AddProductScreen() {
                 title,
                 price: parseFloat(price),
                 category,
-                image: image || 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/iphone.jpg', // Default image
+                image: image || 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/iphone.jpg',
                 discount: discount ? parseFloat(discount) : 0,
-                rating: 5.0, // Default rating
+                rating: 5.0,
             };
 
             const storedProducts = await AsyncStorage.getItem('products');
@@ -62,12 +79,9 @@ export default function AddProductScreen() {
                 products = JSON.parse(storedProducts);
             }
 
-            products.unshift(newProduct); // Add to top
+            products.unshift(newProduct);
             await AsyncStorage.setItem('products', JSON.stringify(products));
-
-            Alert.alert('Uğurlu', 'Məhsul əlavə edildi', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            router.back();
         } catch (error) {
             console.error(error);
             Alert.alert('Xəta', 'Məhsul əlavə edilərkən xəta baş verdi');
@@ -78,7 +92,6 @@ export default function AddProductScreen() {
         <SafeAreaView style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color="#333" />
@@ -138,12 +151,27 @@ export default function AddProductScreen() {
                     </View>
 
                     <View style={styles.formGroup}>
-                        <Text style={styles.label}>Şəkil URL</Text>
+                        <Text style={styles.label}>Məhsulun Şəkli *</Text>
+                        <TouchableOpacity style={styles.imagePickerBtn} onPress={pickImage}>
+                            {pickedImage ? (
+                                <Image source={{ uri: pickedImage }} style={styles.previewImage} />
+                            ) : (
+                                <View style={styles.imagePlaceholder}>
+                                    <Ionicons name="camera" size={30} color="#999" />
+                                    <Text style={styles.placeholderText}>Şəkil seçin</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <Text style={[styles.label, { marginTop: 15 }]}>Və ya Şəkil URL-i</Text>
                         <TextInput
                             style={styles.input}
                             placeholder="https://..."
                             value={image}
-                            onChangeText={setImage}
+                            onChangeText={(val) => {
+                                setImage(val);
+                                if (val.startsWith('http')) setPickedImage(val);
+                                else setPickedImage(null);
+                            }}
                             autoCapitalize="none"
                         />
                     </View>
@@ -255,5 +283,29 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#FF3B30',
         marginTop: 8,
+    },
+    imagePickerBtn: {
+        height: 150,
+        backgroundColor: '#F9F9F9',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        borderStyle: 'dashed',
+        overflow: 'hidden',
+    },
+    imagePlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    placeholderText: {
+        marginTop: 8,
+        color: '#999',
+        fontSize: 14,
+    },
+    previewImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
 });

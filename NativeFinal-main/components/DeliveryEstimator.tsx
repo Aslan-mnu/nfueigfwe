@@ -12,7 +12,6 @@ import {
     View
 } from 'react-native';
 
-// --- Yardımçı Funksiyalar ---
 const formatDate = (date: Date): string => {
     const months = [
         'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun',
@@ -46,7 +45,6 @@ const getDeliveryRange = (today: Date, type: 'Standard' | 'Express' | 'Manual', 
     return `${formatDate(startDate)} - ${formatDate(endDate)} arası`;
 };
 
-// --- Əsas Komponent ---
 interface DeliverySystemProps {
     productName: string;
     productPrice: number;

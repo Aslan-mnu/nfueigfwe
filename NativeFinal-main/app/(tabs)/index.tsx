@@ -23,6 +23,17 @@ import DeliverySystem from '../../components/DeliveryEstimator';
 
 const { width } = Dimensions.get('window');
 
+const getImageSource = (image: string) => {
+    const localImages: { [key: string]: any } = {
+        'iphonr.jpg': require('../../assets/images/iphonr.jpg'),
+        "watch'.jpg": require("../../assets/images/watch'.jpg"),
+        'nsudknik.jpg': require('../../assets/images/nsudknik.jpg'),
+    };
+
+    return localImages[image] ? localImages[image] : { uri: image };
+};
+
+
 export default function HomeScreen() {
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
@@ -33,6 +44,11 @@ export default function HomeScreen() {
     const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+    const [newComment, setNewComment] = useState('');
+    const [newRating, setNewRating] = useState(5);
+    const [productReviews, setProductReviews] = useState<any[]>([]);
+    const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+    const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
     const BANNERS: { id: string, title: string, subtitle: string, colors: readonly [string, string, ...string[]], colorsDark: readonly [string, string, ...string[]] }[] = [
         {
@@ -76,8 +92,8 @@ export default function HomeScreen() {
             const storedProducts = await AsyncStorage.getItem('products');
             const seedProducts = [
                 { id: '1', title: 'iPhone 15 Pro Max', price: 2599.99, rating: 4.8, reviews: 2840, image: 'iphonr.jpg', discount: 10, category: 'Elektronika' },
-                { id: '2', title: 'Samsung Galaxy Watch 6', price: 459.99, rating: 3.0, reviews: 1523, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/watch.jpg', discount: 15, category: 'Elektronika' },
-                { id: '3', title: 'Sony WH-1000XM5', price: 649.99, rating: 4.9, reviews: 3200, image: 'https://notjustdev-dummy.s3.us-east-2.amazonaws.com/images/products/headphone.jpg', category: 'Elektronika' }
+                { id: '2', title: 'Samsung Galaxy Watch 6', price: 459.99, rating: 3.0, reviews: 1523, image: "watch'.jpg", discount: 15, category: 'Elektronika' },
+                { id: '3', title: 'Sony WH-1000XM5', price: 649.99, rating: 4.9, reviews: 3200, image: 'nsudknik.jpg', category: 'Elektronika' }
             ];
 
             if (storedProducts === null) {
@@ -85,7 +101,7 @@ export default function HomeScreen() {
                 setProducts(seedProducts);
             } else {
                 const parsedProds = JSON.parse(storedProducts);
-                setProducts(parsedProds.filter((p: any) => p.visible !== false));
+                setProducts(parsedProds);
             }
 
             const storedCats = await AsyncStorage.getItem('categories');
@@ -102,7 +118,7 @@ export default function HomeScreen() {
                 await AsyncStorage.setItem('categories', JSON.stringify(parsedCats));
             } else {
                 const fullCats = JSON.parse(storedCats);
-                parsedCats = fullCats.filter((c: any) => c.visible !== false);
+                parsedCats = fullCats;
                 if (!parsedCats.some((c: any) => c.name === 'Hamısı')) {
                     parsedCats.unshift({ id: 'all', name: 'Hamısı', icon: 'grid-outline' });
                 }
@@ -117,6 +133,12 @@ export default function HomeScreen() {
 
             const theme = await AsyncStorage.getItem('darkMode');
             setIsDarkMode(theme === 'true');
+
+            const userJson = await AsyncStorage.getItem('user');
+            if (userJson) {
+                const parsed = JSON.parse(userJson);
+                setCurrentUserEmail(parsed.email);
+            }
         } catch (error) {
             console.error(error);
         }
@@ -150,6 +172,133 @@ export default function HomeScreen() {
         } catch (error) { console.error(error); }
     };
 
+    const loadProductReviews = async (productId: string) => {
+        try {
+            const storedAllReviews = await AsyncStorage.getItem('all_reviews') || '{}';
+            const allReviews = JSON.parse(storedAllReviews);
+            setProductReviews(allReviews[productId] || []);
+        } catch (error) { console.error(error); }
+    };
+
+    const submitReview = async () => {
+        if (!selectedProduct || !newComment.trim()) {
+            Alert.alert('Xəta', 'Zəhmət olmasa rəyinizi daxil edin');
+            return;
+        }
+
+        try {
+            const storedUser = await AsyncStorage.getItem('user');
+            const user = storedUser ? JSON.parse(storedUser) : { name: 'Anonim' };
+
+            const review = {
+                id: editingReviewId || Date.now().toString(),
+                userEmail: user.email,
+                userName: `${user.name} ${user.surname || ''}`.trim(),
+                rating: newRating,
+                comment: newComment,
+                date: new Date().toLocaleDateString('az-AZ')
+            };
+
+            const storedAllReviews = await AsyncStorage.getItem('all_reviews') || '{}';
+            const allReviews = JSON.parse(storedAllReviews);
+
+            if (!allReviews[selectedProduct.id]) {
+                allReviews[selectedProduct.id] = [];
+            }
+
+            if (editingReviewId) {
+                const rIdx = allReviews[selectedProduct.id].findIndex((r: any) => r.id === editingReviewId);
+                if (rIdx > -1) allReviews[selectedProduct.id][rIdx] = review;
+            } else {
+                allReviews[selectedProduct.id].unshift(review);
+            }
+
+            await AsyncStorage.setItem('all_reviews', JSON.stringify(allReviews));
+
+            const prodReviews = allReviews[selectedProduct.id];
+            const sumOfRatings = prodReviews.reduce((acc: number, curr: any) => acc + curr.rating, 0);
+            const avgRating = sumOfRatings / prodReviews.length;
+
+            const storedProducts = await AsyncStorage.getItem('products');
+            if (storedProducts) {
+                const currentProducts = JSON.parse(storedProducts);
+                const pIdx = currentProducts.findIndex((p: any) => String(p.id) === String(selectedProduct.id));
+                if (pIdx > -1) {
+                    currentProducts[pIdx].rating = parseFloat(avgRating.toFixed(1));
+                    currentProducts[pIdx].reviews = prodReviews.length;
+                    await AsyncStorage.setItem('products', JSON.stringify(currentProducts));
+                    setProducts(currentProducts);
+                    setSelectedProduct(currentProducts[pIdx]);
+                }
+            }
+
+            setProductReviews(prodReviews);
+            setNewComment('');
+            setNewRating(5);
+            setEditingReviewId(null);
+            Alert.alert('Uğurlu', editingReviewId ? 'Rəyiniz yeniləndi!' : 'Rəyiniz əlavə edildi!');
+        } catch (error) { console.error(error); }
+    };
+
+    const deleteReview = async (reviewId: string) => {
+        if (!selectedProduct) return;
+
+        Alert.alert(
+            'Rəyi sil',
+            'Bu rəyi silmək istədiyinizə əminsiniz?',
+            [
+                { text: 'Xeyr', style: 'cancel' },
+                {
+                    text: 'Bəli',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const storedAllReviews = await AsyncStorage.getItem('all_reviews') || '{}';
+                            const allReviews = JSON.parse(storedAllReviews);
+
+                            if (allReviews[selectedProduct.id]) {
+                                allReviews[selectedProduct.id] = allReviews[selectedProduct.id].filter((r: any) => r.id !== reviewId);
+                                await AsyncStorage.setItem('all_reviews', JSON.stringify(allReviews));
+
+                                const prodReviews = allReviews[selectedProduct.id];
+                                let avgRating = 0;
+                                let reviewsCount = 0;
+
+                                if (prodReviews.length > 0) {
+                                    const sumOfRatings = prodReviews.reduce((acc: number, curr: any) => acc + curr.rating, 0);
+                                    avgRating = sumOfRatings / prodReviews.length;
+                                    reviewsCount = prodReviews.length;
+                                }
+
+                                const storedProducts = await AsyncStorage.getItem('products');
+                                if (storedProducts) {
+                                    const currentProducts = JSON.parse(storedProducts);
+                                    const pIdx = currentProducts.findIndex((p: any) => String(p.id) === String(selectedProduct.id));
+                                    if (pIdx > -1) {
+                                        currentProducts[pIdx].rating = parseFloat(avgRating.toFixed(1));
+                                        currentProducts[pIdx].reviews = reviewsCount;
+                                        await AsyncStorage.setItem('products', JSON.stringify(currentProducts));
+                                        setProducts(currentProducts);
+                                        setSelectedProduct(currentProducts[pIdx]);
+                                    }
+                                }
+
+                                setProductReviews(prodReviews);
+                                Alert.alert('Uğurlu', 'Rəy silindi!');
+                            }
+                        } catch (error) { console.error(error); }
+                    }
+                }
+            ]
+        );
+    };
+
+    const startEditReview = (review: any) => {
+        setEditingReviewId(review.id);
+        setNewComment(review.comment);
+        setNewRating(review.rating);
+    };
+
     const renderCategoryItem = ({ item }: { item: any }) => {
         const isActive = activeCategory === item.name;
         return (
@@ -170,10 +319,13 @@ export default function HomeScreen() {
             <TouchableOpacity
                 key={item.id}
                 style={[styles.productCard, isDarkMode && styles.productCardDark]}
-                onPress={() => setSelectedProduct(item)}
+                onPress={() => {
+                    setSelectedProduct(item);
+                    loadProductReviews(item.id);
+                }}
             >
                 <View style={[styles.imageContainer, isDarkMode && styles.imageContainerDark]}>
-                    <Image source={{ uri: item.image }} style={styles.productImage} resizeMode="contain" />
+                    <Image source={getImageSource(item.image)} style={styles.productImage} resizeMode="contain" />
                     {item.discount > 0 && <View style={styles.discountBadge}><Text style={styles.discountText}>-{item.discount}%</Text></View>}
                     <TouchableOpacity style={[styles.favoriteButton, isDarkMode && styles.favoriteButtonDark]} onPress={() => toggleFavorite(item)}>
                         <Ionicons name={isFav ? "heart" : "heart-outline"} size={20} color={isFav ? "#FF3B30" : "#666"} />
@@ -306,7 +458,7 @@ export default function HomeScreen() {
                             {selectedProduct && (
                                 <View style={{ padding: 20 }}>
                                     <View style={[styles.modalImageContainer, isDarkMode && styles.imageContainerDark]}>
-                                        <Image source={{ uri: selectedProduct.image }} style={styles.modalProductImage} resizeMode="contain" />
+                                        <Image source={getImageSource(selectedProduct.image)} style={styles.modalProductImage} resizeMode="contain" />
                                     </View>
 
                                     <DeliverySystem
@@ -314,6 +466,78 @@ export default function HomeScreen() {
                                         productPrice={selectedProduct.price}
                                         isDarkMode={isDarkMode}
                                     />
+
+                                    <View style={[styles.reviewsSection, isDarkMode && styles.reviewsSectionDark]}>
+                                        <Text style={[styles.reviewsTitle, isDarkMode && styles.textDark]}>Rəylər ({productReviews.length})</Text>
+
+                                        <View style={[styles.addReviewForm, isDarkMode && styles.addReviewFormDark]}>
+                                            <Text style={[styles.formLabel, isDarkMode && styles.textDark]}>Rəy bildir</Text>
+                                            <View style={styles.starSelector}>
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                    <TouchableOpacity key={star} onPress={() => setNewRating(star)}>
+                                                        <Ionicons
+                                                            name={star <= newRating ? "star" : "star-outline"}
+                                                            size={24}
+                                                            color="#FFD700"
+                                                        />
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+                                            <TextInput
+                                                style={[styles.reviewInput, isDarkMode && styles.reviewInputDark, isDarkMode && styles.textDark]}
+                                                placeholder="Fikirlərinizi bölüşün..."
+                                                placeholderTextColor="#999"
+                                                multiline
+                                                value={newComment}
+                                                onChangeText={setNewComment}
+                                            />
+                                            <TouchableOpacity style={[styles.submitReviewBtn, editingReviewId && styles.updateReviewBtn]} onPress={submitReview}>
+                                                <Text style={styles.submitReviewBtnText}>{editingReviewId ? 'Yenilə' : 'Göndər'}</Text>
+                                            </TouchableOpacity>
+                                            {editingReviewId && (
+                                                <TouchableOpacity
+                                                    style={styles.cancelEditBtn}
+                                                    onPress={() => {
+                                                        setEditingReviewId(null);
+                                                        setNewComment('');
+                                                        setNewRating(5);
+                                                    }}
+                                                >
+                                                    <Text style={styles.cancelEditBtnText}>Ləğv et</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+
+                                        {productReviews.length > 0 ? (
+                                            productReviews.map((review) => (
+                                                <View key={review.id} style={[styles.reviewItem, isDarkMode && styles.reviewItemDark]}>
+                                                    <View style={styles.reviewHeader}>
+                                                        <Text style={[styles.reviewerName, isDarkMode && styles.textDark]}>{review.userName}</Text>
+                                                        <View style={styles.reviewActions}>
+                                                            <View style={styles.modalRating}>
+                                                                <Ionicons name="star" size={12} color="#FFD700" />
+                                                                <Text style={[styles.modalRatingText, isDarkMode && styles.textDarkSecondary]}>{review.rating}.0</Text>
+                                                            </View>
+                                                            {currentUserEmail === review.userEmail && (
+                                                                <View style={styles.userReviewBtns}>
+                                                                    <TouchableOpacity onPress={() => startEditReview(review)}>
+                                                                        <Ionicons name="create-outline" size={18} color="#007AFF" />
+                                                                    </TouchableOpacity>
+                                                                    <TouchableOpacity onPress={() => deleteReview(review.id)}>
+                                                                        <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                                                                    </TouchableOpacity>
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                    </View>
+                                                    <Text style={[styles.reviewDate, isDarkMode && styles.textDarkSecondary]}>{review.date}</Text>
+                                                    <Text style={[styles.reviewComment, isDarkMode && styles.textDarkSecondary]}>{review.comment}</Text>
+                                                </View>
+                                            ))
+                                        ) : (
+                                            <Text style={[styles.noReviewsText, isDarkMode && styles.textDarkSecondary]}>Hələ rəy yoxdur. İlk rəyi sən yaz!</Text>
+                                        )}
+                                    </View>
 
                                     <TouchableOpacity
                                         style={[styles.largeAddToCartBtn, { marginTop: 20 }]}
@@ -394,4 +618,29 @@ const styles = StyleSheet.create({
     modalProductImage: { width: '80%', height: '80%' },
     largeAddToCartBtn: { backgroundColor: '#007AFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12, gap: 10 },
     largeAddToCartText: { color: '#FFF', fontSize: 16, fontFamily: 'Inter-Bold' },
+    reviewsSection: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+    reviewsSectionDark: { borderTopColor: '#333' },
+    reviewsTitle: { fontSize: 16, fontFamily: 'Montserrat-Bold', color: '#111', marginBottom: 16 },
+    reviewItem: { marginBottom: 16, backgroundColor: '#FAFAFA', padding: 12, borderRadius: 12 },
+    reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    reviewerName: { fontSize: 14, fontFamily: 'Inter-SemiBold', color: '#333' },
+    modalRating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    modalRatingText: { fontSize: 12, fontFamily: 'Inter-Bold', color: '#666' },
+    reviewComment: { fontSize: 13, fontFamily: 'Inter-Regular', color: '#666', lineHeight: 20 },
+    reviewDate: { fontSize: 11, fontFamily: 'Inter-Regular', color: '#999', marginBottom: 6 },
+    reviewItemDark: { backgroundColor: '#2C2C2E' },
+    noReviewsText: { textAlign: 'center', color: '#999', fontSize: 14, marginTop: 10, fontFamily: 'Inter-Regular' },
+    addReviewForm: { backgroundColor: '#F9F9F9', padding: 16, borderRadius: 12, marginBottom: 24 },
+    addReviewFormDark: { backgroundColor: '#2C2C2E' },
+    formLabel: { fontSize: 15, fontFamily: 'Inter-Bold', color: '#333', marginBottom: 12 },
+    starSelector: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    reviewInput: { backgroundColor: '#FFF', borderRadius: 10, padding: 12, height: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: '#E5E5EA', fontFamily: 'Inter-Regular' },
+    reviewInputDark: { backgroundColor: '#1C1C1E', borderColor: '#3A3A3C' },
+    submitReviewBtn: { backgroundColor: '#007AFF', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 },
+    updateReviewBtn: { backgroundColor: '#34C759' },
+    submitReviewBtnText: { color: '#FFF', fontSize: 14, fontFamily: 'Inter-Bold' },
+    cancelEditBtn: { paddingVertical: 10, alignItems: 'center' },
+    cancelEditBtnText: { color: '#FF3B30', fontSize: 13, fontFamily: 'Inter-Medium' },
+    reviewActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    userReviewBtns: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 10, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: '#EEE' },
 });

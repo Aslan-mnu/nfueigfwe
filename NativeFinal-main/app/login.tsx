@@ -31,16 +31,19 @@ export default function LoginScreen() {
         }
 
         try {
-            const userData = await AsyncStorage.getItem('user');
-            if (userData) {
-                const user = JSON.parse(userData);
-                if (user.email === email && user.password === password) {
+            const storedUsers = await AsyncStorage.getItem('users');
+            if (storedUsers) {
+                const users = JSON.parse(storedUsers);
+                const foundUser = users.find((u: any) => u.email === email && u.password === password);
+
+                if (foundUser) {
+                    await AsyncStorage.setItem('user', JSON.stringify(foundUser));
                     router.replace('/(tabs)');
                 } else {
                     alert('Email və ya şifrə yanlışdır');
                 }
             } else {
-                alert('İstifadəçi tapılmadı');
+                alert('İstifadəçi tapılmadı. Zəhmət olmasa qeydiyyatdan keçin');
             }
         } catch (error) {
             alert('Giriş zamanı xəta baş verdi');
@@ -54,7 +57,6 @@ export default function LoginScreen() {
                 style={{ flex: 1 }}
             >
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {/* Logo and Shop Name */}
                     <View style={styles.headerSection}>
                         <View style={styles.logoContainer}>
                             <View style={styles.iconBackground}>
@@ -68,7 +70,6 @@ export default function LoginScreen() {
                         <Text style={styles.welcomeText}>Xoş gəlmisiniz!</Text>
                     </View>
 
-                    {/* Form Section */}
                     <View style={styles.formSection}>
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Email</Text>
@@ -112,7 +113,6 @@ export default function LoginScreen() {
                             <Text style={styles.forgotPasswordText}>Şifrəni unutmusunuz?</Text>
                         </TouchableOpacity>
 
-                        {/* Login Button */}
                         <TouchableOpacity
                             style={styles.loginButton}
                             onPress={handleLogin}
@@ -120,7 +120,6 @@ export default function LoginScreen() {
                             <Text style={styles.loginButtonText}>Daxil ol</Text>
                         </TouchableOpacity>
 
-                        {/* Footer */}
                         <View style={styles.footer}>
                             <Text style={styles.footerText}>Hesabınız yoxdur? </Text>
                             <TouchableOpacity onPress={() => router.push('/register' as any)}>

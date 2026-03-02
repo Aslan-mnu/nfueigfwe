@@ -49,8 +49,23 @@ export default function RegisterScreen() {
         }
 
         try {
-            const user = { name, surname, email, password };
-            await AsyncStorage.setItem('user', JSON.stringify(user));
+            const newUser = { name, surname, email, password, avatar: null };
+
+            const storedUsers = await AsyncStorage.getItem('users');
+            let users = [];
+            if (storedUsers) {
+                users = JSON.parse(storedUsers);
+            }
+
+            if (users.some((u: any) => u.email === email)) {
+                alert('Bu email ilə artıq qeydiyyatdan keçilib');
+                return;
+            }
+
+            users.push(newUser);
+            await AsyncStorage.setItem('users', JSON.stringify(users));
+            await AsyncStorage.setItem('user', JSON.stringify(newUser));
+
             alert('Qeydiyyat uğurla tamamlandı. İndi giriş edə bilərsiniz.');
             router.replace('/login' as any);
         } catch (error) {
@@ -65,7 +80,6 @@ export default function RegisterScreen() {
                 style={{ flex: 1 }}
             >
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {/* Logo and Shop Name */}
                     <View style={styles.headerSection}>
                         <View style={styles.logoContainer}>
                             <View style={styles.iconBackground}>
@@ -79,7 +93,6 @@ export default function RegisterScreen() {
                         <Text style={styles.welcomeText}>Hesab yaradın</Text>
                     </View>
 
-                    {/* Form Section */}
                     <View style={styles.formSection}>
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Ad</Text>
@@ -156,7 +169,6 @@ export default function RegisterScreen() {
                             <Text style={styles.registerButtonText}>Qeydiyyatdan keç</Text>
                         </TouchableOpacity>
 
-                        {/* Footer */}
                         <View style={styles.footer}>
                             <Text style={styles.footerText}>Artıq hesabınız var? </Text>
                             <TouchableOpacity onPress={() => router.back()}>

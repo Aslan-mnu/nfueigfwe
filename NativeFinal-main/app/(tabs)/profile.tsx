@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
     Alert,
+    Image,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -16,13 +18,14 @@ import {
 
 export default function ProfileScreen() {
     const router = useRouter();
-    const [userData, setUserData] = useState<{ name: string; surname: string; email: string } | null>(null);
+    const [userData, setUserData] = useState<{ name: string; surname: string; email: string; avatar?: string } | null>(null);
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [activeTab, setActiveTab] = useState<'menu' | 'orders' | 'settings' | 'favorites' | 'notifications' | 'edit_account'>('menu');
     const [orders, setOrders] = useState<any[]>([]);
     const [favorites, setFavorites] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [avatar, setAvatar] = useState<string | null>(null);
 
-    // Edit Profile State
     const [editName, setEditName] = useState('');
     const [editSurname, setEditSurname] = useState('');
     const [notifCount, setNotifCount] = useState(0);
@@ -41,6 +44,18 @@ export default function ProfileScreen() {
                 setUserData(parsed);
                 setEditName(parsed.name);
                 setEditSurname(parsed.surname);
+                if (parsed.avatar) setAvatar(parsed.avatar);
+
+                if (parsed.email) {
+                    const notifKey = `notifications_${parsed.email}`;
+                    const storedNotifs = await AsyncStorage.getItem(notifKey);
+                    if (storedNotifs) {
+                        const parsedNotifs = JSON.parse(storedNotifs);
+                        setNotifications(parsedNotifs);
+                        const unread = parsedNotifs.filter((n: any) => !n.read).length;
+                        setNotifCount(unread);
+                    }
+                }
             }
 
             const theme = await AsyncStorage.getItem('darkMode');
@@ -51,9 +66,6 @@ export default function ProfileScreen() {
 
             const storedFavs = await AsyncStorage.getItem('favorites');
             if (storedFavs) setFavorites(JSON.parse(storedFavs));
-
-            const hasReadNotifs = await AsyncStorage.getItem('notificationsRead');
-            setNotifCount(hasReadNotifs === 'true' ? 0 : 1);
         } catch (error) {
             console.error('Failed to load data', error);
         }
@@ -66,10 +78,65 @@ export default function ProfileScreen() {
         DeviceEventEmitter.emit('themeChanged', newValue);
     };
 
+    const pickImage = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (status !== 'granted') {
+            Alert.alert('İcazə lazımdır', 'Profil şəkli seçmək üçün qalereyaya icazə verməlisiniz.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+        });
+
+        if (!result.canceled) {
+            const newAvatar = result.assets[0].uri;
+            setAvatar(newAvatar);
+
+            try {
+                const userJson = await AsyncStorage.getItem('user');
+                if (userJson) {
+                    const parsedUser = JSON.parse(userJson);
+                    const updatedUser = { ...parsedUser, avatar: newAvatar };
+
+                    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                    setUserData(updatedUser);
+
+                    const storedUsers = await AsyncStorage.getItem('users');
+                    if (storedUsers) {
+                        let users = JSON.parse(storedUsers);
+                        const idx = users.findIndex((u: any) => u.email === parsedUser.email);
+                        if (idx > -1) {
+                            users[idx] = updatedUser;
+                            await AsyncStorage.setItem('users', JSON.stringify(users));
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Avatar save error:', error);
+            }
+        }
+    };
+
     const handleUpdateAccount = async () => {
         try {
-            const updatedUser = { ...userData, name: editName, surname: editSurname };
+            const updatedUser = { ...userData, name: editName, surname: editSurname, avatar };
             await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+
+            const storedUsers = await AsyncStorage.getItem('users');
+            if (storedUsers) {
+                let users = JSON.parse(storedUsers);
+                const idx = users.findIndex((u: any) => u.email === (userData as any).email);
+                if (idx > -1) {
+                    users[idx] = updatedUser;
+                    await AsyncStorage.setItem('users', JSON.stringify(users));
+                }
+            }
+
             setUserData(updatedUser as any);
             setActiveTab('settings');
             Alert.alert('Uğurlu', 'Məlumatlar yeniləndi!');
@@ -102,6 +169,15 @@ export default function ProfileScreen() {
         router.replace('/login');
     };
 
+    const markNotifsAsRead = async () => {
+        if (!userData?.email) return;
+        const notifKey = `notifications_${userData.email}`;
+        const updated = notifications.map(n => ({ ...n, read: true }));
+        await AsyncStorage.setItem(notifKey, JSON.stringify(updated));
+        setNotifications(updated);
+        setNotifCount(0);
+    };
+
     const MenuItem = ({ icon, title, badge, onPress }: { icon: string; title: string; badge?: number, onPress?: () => void }) => (
         <TouchableOpacity style={[styles.menuItem, isDarkMode && styles.menuItemDark]} onPress={onPress}>
             <View style={styles.menuItemLeft}>
@@ -123,15 +199,22 @@ export default function ProfileScreen() {
         <View style={[styles.orderCard, isDarkMode && styles.orderCardDark]}>
             <View style={styles.orderHeader}>
                 <View>
-                    <Text style={[styles.orderDate, isDarkMode && styles.textDark]}>Sifariş #{order.id.slice(0, 8)}</Text>
-                    <Text style={[styles.orderInfo, isDarkMode && styles.textDarkSecondary]}>{order.date || 'Bugün'}</Text>
+                    <Text style={[styles.orderDate, isDarkMode && styles.textDark]}>Məbləğ: {order.total} ₼</Text>
+                    <Text style={[styles.orderInfo, isDarkMode && styles.textDarkSecondary]}>Status: {order.status || 'Gözləmədə'}</Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.cancelOrderBtn}
-                    onPress={() => cancelOrder(order.id)}
-                >
-                    <Text style={styles.cancelOrderTxt}>Ləğv et</Text>
-                </TouchableOpacity>
+                {order.status === 'Çatdırıldı' ? (
+                    <View style={styles.deliveredStatusBadge}>
+                        <Ionicons name="checkmark-circle" size={14} color="#2E7D32" style={{ marginRight: 4 }} />
+                        <Text style={styles.deliveredStatusText}>Çatdırıldı</Text>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        style={styles.cancelOrderBtn}
+                        onPress={() => cancelOrder(order.id)}
+                    >
+                        <Text style={styles.cancelOrderTxt}>Ləğv et</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <View style={styles.orderFooter}>
@@ -155,9 +238,16 @@ export default function ProfileScreen() {
         <SafeAreaView style={[styles.container, isDarkMode && styles.containerDark]}>
             <View style={[styles.header, isDarkMode && styles.headerDark]}>
                 <View style={styles.profileInfo}>
-                    <View style={styles.avatarContainer}>
-                        <Ionicons name="person-outline" size={40} color="#FFF" />
-                    </View>
+                    <TouchableOpacity style={styles.avatarContainer} onPress={pickImage}>
+                        {avatar ? (
+                            <Image source={{ uri: avatar }} style={styles.avatarImage} />
+                        ) : (
+                            <Ionicons name="person-outline" size={40} color="#FFF" />
+                        )}
+                        <View style={styles.editIconBadge}>
+                            <Ionicons name="camera" size={12} color="#007AFF" />
+                        </View>
+                    </TouchableOpacity>
                     <View style={styles.userInfo}>
                         <Text style={styles.userName}>
                             {userData ? `${userData.name} ${userData.surname}` : 'Qonaq İstifadəçi'}
@@ -190,8 +280,7 @@ export default function ProfileScreen() {
                                 badge={notifCount > 0 ? notifCount : undefined}
                                 onPress={() => {
                                     setActiveTab('notifications');
-                                    setNotifCount(0);
-                                    AsyncStorage.setItem('notificationsRead', 'true');
+                                    markNotifsAsRead();
                                 }}
                             />
                             <MenuItem
@@ -242,10 +331,20 @@ export default function ProfileScreen() {
                                 <Text style={[styles.sectionTitle, isDarkMode && styles.textDark]}>Bildirişlər</Text>
                                 <TouchableOpacity onPress={() => setActiveTab('menu')}><Text style={styles.backLink}>Geri</Text></TouchableOpacity>
                             </View>
-                            <View style={[styles.orderCard, isDarkMode && styles.orderCardDark]}>
-                                <Text style={[styles.orderDate, isDarkMode && styles.textDark]}>Xoş gəldiniz!</Text>
-                                <Text style={[styles.orderInfo, isDarkMode && styles.textDarkSecondary]}>MiniShop tətbiqini seçdiyiniz üçün təşəkkürlər.</Text>
-                            </View>
+                            {notifications.length === 0 ? (
+                                <Text style={[styles.emptyText, isDarkMode && styles.textDarkSecondary]}>Heç bir bildiriş yoxdur</Text>
+                            ) : (
+                                notifications.map(notif => (
+                                    <View key={notif.id} style={[styles.orderCard, isDarkMode && styles.orderCardDark, !notif.read && styles.unreadNotif]}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                            <Text style={[styles.orderDate, isDarkMode && styles.textDark]}>{notif.title}</Text>
+                                            {!notif.read && <View style={styles.unreadDot} />}
+                                        </View>
+                                        <Text style={[styles.orderInfo, isDarkMode && styles.textDarkSecondary, { marginTop: 4 }]}>{notif.message}</Text>
+                                        <Text style={[styles.orderInfo, { fontSize: 10, marginTop: 8, color: '#999' }]}>{notif.date}</Text>
+                                    </View>
+                                ))
+                            )}
                         </View>
                     )}
 
@@ -306,6 +405,8 @@ const styles = StyleSheet.create({
     avatarContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', marginRight: 16 },
     userInfo: { flex: 1 },
     userName: { fontSize: 18, fontFamily: 'Montserrat-Bold', color: '#FFFFFF', marginBottom: 4 },
+    avatarImage: { width: '100%', height: '100%', borderRadius: 35 },
+    editIconBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#FFF', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#007AFF' },
     userEmail: { fontSize: 14, fontFamily: 'Inter-Regular', color: 'rgba(255,255,255,0.8)' },
     contentWrapper: { flex: 1, backgroundColor: '#FFFFFF' },
     contentWrapperDark: { backgroundColor: '#121212' },
@@ -355,6 +456,11 @@ const styles = StyleSheet.create({
     emptyText: { textAlign: 'center', marginTop: 40, fontSize: 15, fontFamily: 'Inter-Medium', color: '#999' },
     textDark: { color: '#FFF' },
     textDarkSecondary: { color: '#AAA' },
+    unreadNotif: { borderColor: '#007AFF', borderWidth: 1.5 },
+    unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#007AFF' },
+    deliveredStatusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+    deliveredStatusText: { color: '#2E7D32', fontSize: 11, fontFamily: 'Inter-Bold' },
 });
 
 import { DeviceEventEmitter } from 'react-native';
+
